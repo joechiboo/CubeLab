@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CubeLab · 魔術方塊</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: linear-gradient(180deg, #fef9f3 0%, #ffe9c9 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+    color: #333;
+    overflow: hidden;
+    user-select: none;
+    touch-action: none;
+  }
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+  #canvas-wrap { flex: 1; position: relative; min-height: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #ui {
+    padding: 16px max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right));
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+  }
+  button {
+    flex: 1;
+    max-width: 200px;
+    padding: 16px 20px;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    border: none;
+    border-radius: 18px;
+    cursor: pointer;
+    color: #fff;
+    transition: transform 0.08s ease, box-shadow 0.08s ease, opacity 0.2s;
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.18);
+  }
+  button:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+  }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  #scramble { background: #ff9a3c; }
+  #reset    { background: #4dabf7; }
+  #banner {
+    position: absolute;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-160px);
+    background: linear-gradient(135deg, #ffd166 0%, #ff6b6b 100%);
+    padding: 18px 36px;
+    border-radius: 999px;
+    font-size: 26px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    color: #fff;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 12px 32px rgba(255, 107, 107, 0.35);
+    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: none;
+    z-index: 10;
+    white-space: nowrap;
+  }
+  #banner.show { transform: translateX(-50%) translateY(0); }
+  #hint {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #keys {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 10px 12px 0;
+  }
+  .key {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 14px 5px 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    font-weight: 700;
+    font-size: 14px;
+    color: #333;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  .key:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  }
+  .key:disabled { opacity: 0.5; cursor: not-allowed; }
+  .key kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+  }
+  .key[data-face="U"] kbd { background: #ffffff; color: #333; box-shadow: 0 0 0 2px #ddd, 0 2px 0 rgba(0, 0, 0, 0.18); }
+  .key[data-face="D"] kbd { background: #ffd54a; color: #5a4500; }
+  .key[data-face="L"] kbd { background: #ff8a3c; }
+  .key[data-face="R"] kbd { background: #ff5b5b; }
+  .key[data-face="F"] kbd { background: #55c759; }
+  .key[data-face="B"] kbd { background: #4dabf7; }
+  .key[data-face="M"] kbd { background: #9aa0a6; }
+  .key .num {
+    font-size: 11px;
+    font-weight: 800;
+    color: rgba(0, 0, 0, 0.45);
+    background: rgba(0, 0, 0, 0.06);
+    padding: 2px 7px;
+    border-radius: 999px;
+    margin-left: 2px;
+  }
+  .key-tip {
+    text-align: center;
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.5);
+    padding: 6px 12px 2px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="canvas-wrap">
+    <canvas id="cube-canvas"></canvas>
+    <div id="banner">完成 🎉</div>
+    <div id="hint">拖空白處轉視角 · 拖方塊面轉動該層</div>
+  </div>
+  <div id="keys">
+    <button class="key" data-face="R" data-ccw="0"><kbd>R</kbd>右順<span class="num">1</span></button>
+    <button class="key" data-face="U" data-ccw="0"><kbd>U</kbd>上順<span class="num">2</span></button>
+    <button class="key" data-face="F" data-ccw="1"><kbd>F'</kbd>前逆<span class="num">3</span></button>
+    <button class="key" data-face="B" data-ccw="0"><kbd>B</kbd>後順<span class="num">4</span></button>
+    <button class="key" data-face="U" data-ccw="1"><kbd>U'</kbd>上逆<span class="num">5</span></button>
+    <button class="key" data-face="F" data-ccw="0"><kbd>F</kbd>前順<span class="num">6</span></button>
+    <button class="key" data-face="R" data-ccw="1"><kbd>R'</kbd>右逆<span class="num">7</span></button>
+  </div>
+  <div class="key-tip">按字母、數字、或數字小鍵盤 = 順時鐘 　·　 Shift + 按鍵 = 逆時鐘</div>
+  <div id="ui">
+    <button id="scramble">打亂</button>
+    <button id="reset">重置</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const COLORS = {
+  U: 0xffffff, // 白 (top, +Y)
+  D: 0xffd54a, // 黃 (bottom, -Y)
+  R: 0xff5b5b, // 紅 (right, +X)
+  L: 0xff8a3c, // 橙 (left, -X)
+  F: 0x55c759, // 綠 (front, +Z)
+  B: 0x4dabf7, // 藍 (back, -Z)
+  INSIDE: 0x1a1a1a,
+};
+
+const canvas = document.getElementById('cube-canvas');
+const wrap = document.getElementById('canvas-wrap');
+const banner = document.getElementById('banner');
+const btnScramble = document.getElementById('scramble');
+const btnReset = document.getElementById('reset');
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(5.5, 5.5, 7.5);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+const key = new THREE.DirectionalLight(0xffffff, 0.55);
+key.position.set(6, 9, 7);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 0.25);
+fill.position.set(-5, -3, -4);
+scene.add(fill);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.12;
+controls.rotateSpeed = 0.9;
+controls.enableZoom = false;
+controls.enablePan = false;
+controls.minPolarAngle = Math.PI * 0.15;
+controls.maxPolarAngle = Math.PI * 0.85;
+
+const cubeGroup = new THREE.Group();
+scene.add(cubeGroup);
+
+const SIZE = 1;
+const GAP = 0.06;
+const STEP = SIZE + GAP;
+const cubies = [];
+
+function makeCubie(x, y, z) {
+  const geom = new THREE.BoxGeometry(SIZE, SIZE, SIZE);
+  // material order: +X, -X, +Y, -Y, +Z, -Z
+  const mats = [
+    new THREE.MeshLambertMaterial({ color: x ===  1 ? COLORS.R : COLORS.INSIDE }),
+    new THREE.MeshLambertMaterial({ color: x === -1 ? COLORS.L : COLORS.INSIDE }),
+    new THREE.MeshLambertMaterial({ color: y ===  1 ? COLORS.U : COLORS.INSIDE }),
+    new THREE.MeshLambertMaterial({ color: y === -1 ? COLORS.D : COLORS.INSIDE }),
+    new THREE.MeshLambertMaterial({ color: z ===  1 ? COLORS.F : COLORS.INSIDE }),
+    new THREE.MeshLambertMaterial({ color: z === -1 ? COLORS.B : COLORS.INSIDE }),
+  ];
+  const mesh = new THREE.Mesh(geom, mats);
+  mesh.position.set(x * STEP, y * STEP, z * STEP);
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geom),
+    new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 })
+  );
+  mesh.add(edges);
+  cubeGroup.add(mesh);
+  cubies.push({ mesh, home: new THREE.Vector3(x, y, z) });
+}
+
+for (let x = -1; x <= 1; x++)
+  for (let y = -1; y <= 1; y++)
+    for (let z = -1; z <= 1; z++)
+      makeCubie(x, y, z);
+
+function resize() {
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+resize();
+window.addEventListener('resize', resize);
+
+let animating = false;
+let bannerTimer = null;
+
+function logicalPos(mesh) {
+  return new THREE.Vector3(
+    Math.round(mesh.position.x / STEP),
+    Math.round(mesh.position.y / STEP),
+    Math.round(mesh.position.z / STEP),
+  );
+}
+
+function rotateLayer(axis, layerIndex, dir, durationMs = 220) {
+  return new Promise(resolve => {
+    if (animating) { resolve(); return; }
+    animating = true;
+    const pivot = new THREE.Group();
+    scene.add(pivot);
+    const moving = [];
+    for (const c of cubies) {
+      const p = logicalPos(c.mesh);
+      if (p[axis] === layerIndex) {
+        pivot.attach(c.mesh);
+        moving.push(c);
+      }
+    }
+    const target = dir * Math.PI / 2;
+    const t0 = performance.now();
+    function step() {
+      const t = Math.min(1, (performance.now() - t0) / durationMs);
+      // ease-in-out quad
+      const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      pivot.rotation[axis] = e * target;
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        pivot.rotation[axis] = target;
+        pivot.updateMatrixWorld(true);
+        for (const c of moving) {
+          cubeGroup.attach(c.mesh);
+          c.mesh.position.x = Math.round(c.mesh.position.x / STEP) * STEP;
+          c.mesh.position.y = Math.round(c.mesh.position.y / STEP) * STEP;
+          c.mesh.position.z = Math.round(c.mesh.position.z / STEP) * STEP;
+        }
+        scene.remove(pivot);
+        animating = false;
+        checkSolved();
+        resolve();
+      }
+    }
+    step();
+  });
+}
+
+const _tmpVec = new THREE.Vector3();
+const _tmpQuat = new THREE.Quaternion();
+function checkSolved() {
+  const buckets = { '+x': [], '-x': [], '+y': [], '-y': [], '+z': [], '-z': [] };
+  const faceNormals = [
+    [new THREE.Vector3( 1, 0, 0), 0],
+    [new THREE.Vector3(-1, 0, 0), 1],
+    [new THREE.Vector3( 0, 1, 0), 2],
+    [new THREE.Vector3( 0,-1, 0), 3],
+    [new THREE.Vector3( 0, 0, 1), 4],
+    [new THREE.Vector3( 0, 0,-1), 5],
+  ];
+  for (const c of cubies) {
+    c.mesh.updateMatrixWorld();
+    c.mesh.getWorldQuaternion(_tmpQuat);
+    for (const [n, idx] of faceNormals) {
+      const color = c.mesh.material[idx].color.getHex();
+      if (color === COLORS.INSIDE) continue;
+      _tmpVec.copy(n).applyQuaternion(_tmpQuat);
+      const ax = Math.abs(_tmpVec.x), ay = Math.abs(_tmpVec.y), az = Math.abs(_tmpVec.z);
+      let key;
+      if (ax >= ay && ax >= az)      key = _tmpVec.x > 0 ? '+x' : '-x';
+      else if (ay >= az)              key = _tmpVec.y > 0 ? '+y' : '-y';
+      else                            key = _tmpVec.z > 0 ? '+z' : '-z';
+      buckets[key].push(color);
+    }
+  }
+  for (const k in buckets) {
+    const arr = buckets[k];
+    if (arr.length === 0) continue;
+    const first = arr[0];
+    if (!arr.every(c => c === first)) return;
+  }
+  showBanner();
+}
+
+function showBanner() {
+  banner.classList.add('show');
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => banner.classList.remove('show'), 2800);
+}
+
+// ----- 拖曳判定 -----
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let drag = null;
+
+function setNDC(ev, out) {
+  const rect = canvas.getBoundingClientRect();
+  out.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+  out.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+}
+
+function projectVecToScreen(worldOrigin, worldVec) {
+  const a = worldOrigin.clone().project(camera);
+  const b = worldOrigin.clone().add(worldVec).project(camera);
+  // 翻 Y 使其與螢幕座標一致 (y 向下為正)
+  return new THREE.Vector2(b.x - a.x, -(b.y - a.y));
+}
+
+function onPointerDown(ev) {
+  if (animating || !controls.enabled) return;
+  setNDC(ev, ndc);
+  raycaster.setFromCamera(ndc, camera);
+  const meshes = cubies.map(c => c.mesh);
+  const hits = raycaster.intersectObjects(meshes, false);
+  if (hits.length === 0) return; // 空白處 → 讓 OrbitControls 處理視角
+  const hit = hits[0];
+  const cubie = cubies.find(c => c.mesh === hit.object);
+  if (!cubie) return;
+
+  // 在 capture phase 攔截,避免 OrbitControls 也接到
+  controls.enabled = false;
+
+  const faceNormalWorld = hit.face.normal.clone()
+    .transformDirection(hit.object.matrixWorld);
+  // 對齊到最近的軸向
+  const ax = Math.abs(faceNormalWorld.x);
+  const ay = Math.abs(faceNormalWorld.y);
+  const az = Math.abs(faceNormalWorld.z);
+  const n = new THREE.Vector3();
+  if (ax >= ay && ax >= az) n.set(Math.sign(faceNormalWorld.x), 0, 0);
+  else if (ay >= az)         n.set(0, Math.sign(faceNormalWorld.y), 0);
+  else                       n.set(0, 0, Math.sign(faceNormalWorld.z));
+
+  drag = {
+    cubie,
+    n,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    hitWorld: hit.point.clone(),
+    started: false,
+    pointerId: ev.pointerId,
+  };
+  canvas.setPointerCapture?.(ev.pointerId);
+}
+
+function onPointerMove(ev) {
+  if (!drag || drag.pointerId !== ev.pointerId) return;
+  if (drag.started) return;
+  const dx = ev.clientX - drag.startX;
+  const dy = ev.clientY - drag.startY;
+  if (Math.hypot(dx, dy) < 10) return;
+
+  // 兩個切線軸 (與面法向垂直)
+  const candidates = [
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, 0, 1),
+  ].filter(v => Math.abs(v.dot(drag.n)) < 0.5);
+
+  const dragScreen = new THREE.Vector2(dx, dy);
+  let best = null;
+  let bestScore = 0;
+  for (const t of candidates) {
+    const tScreen = projectVecToScreen(drag.hitWorld, t);
+    const len = tScreen.length();
+    if (len < 1e-6) continue;
+    const score = dragScreen.dot(tScreen) / len;
+    if (Math.abs(score) > Math.abs(bestScore)) {
+      bestScore = score;
+      best = t;
+    }
+  }
+  if (!best) return;
+
+  const dragAxis = best.clone().multiplyScalar(Math.sign(bestScore));
+  // 旋轉軸 = n × dragAxis (含正負號)
+  const rotAxis = new THREE.Vector3().crossVectors(drag.n, dragAxis);
+  rotAxis.x = Math.round(rotAxis.x);
+  rotAxis.y = Math.round(rotAxis.y);
+  rotAxis.z = Math.round(rotAxis.z);
+  const axisName = Math.abs(rotAxis.x) > 0.5 ? 'x' : Math.abs(rotAxis.y) > 0.5 ? 'y' : 'z';
+  const sign = rotAxis[axisName];
+  const layerIndex = logicalPos(drag.cubie.mesh)[axisName];
+
+  drag.started = true;
+  rotateLayer(axisName, layerIndex, sign).then(() => {
+    controls.enabled = true;
+  });
+}
+
+function onPointerUp(ev) {
+  if (!drag || drag.pointerId !== ev.pointerId) return;
+  canvas.releasePointerCapture?.(ev.pointerId);
+  if (!drag.started) controls.enabled = true; // 沒真的拖,還回去
+  drag = null;
+}
+
+// capture phase: 確保在 OrbitControls 之前接到 pointerdown
+canvas.addEventListener('pointerdown', onPointerDown, true);
+canvas.addEventListener('pointermove', onPointerMove);
+canvas.addEventListener('pointerup', onPointerUp);
+canvas.addEventListener('pointercancel', onPointerUp);
+
+// ----- 按鈕 -----
+async function scramble() {
+  if (animating) return;
+  banner.classList.remove('show');
+  btnScramble.disabled = true;
+  btnReset.disabled = true;
+  controls.enabled = false;
+  const axes = ['x', 'y', 'z'];
+  const layers = [-1, 0, 1];
+  let prevAxis = null;
+  for (let i = 0; i < 25; i++) {
+    let ax;
+    do { ax = axes[Math.floor(Math.random() * 3)]; } while (ax === prevAxis);
+    prevAxis = ax;
+    const layer = layers[Math.floor(Math.random() * 3)];
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    await rotateLayer(ax, layer, dir, 85);
+  }
+  btnScramble.disabled = false;
+  btnReset.disabled = false;
+  controls.enabled = true;
+}
+
+function reset() {
+  if (animating) return;
+  banner.classList.remove('show');
+  for (const c of cubies) {
+    c.mesh.position.set(c.home.x * STEP, c.home.y * STEP, c.home.z * STEP);
+    c.mesh.quaternion.identity();
+  }
+}
+
+btnScramble.addEventListener('click', scramble);
+btnReset.addEventListener('click', reset);
+
+// ----- 鍵盤 / 點按 控制 (標準魔方記號) -----
+// dir 為 rotateLayer 的 sign,使物理結果等同該面「順時鐘」(從該面外側看)
+const FACE_TURNS = {
+  U: { axis: 'y', layer:  1, cw: +1 },
+  D: { axis: 'y', layer: -1, cw: -1 },
+  R: { axis: 'x', layer:  1, cw: +1 },
+  L: { axis: 'x', layer: -1, cw: -1 },
+  F: { axis: 'z', layer:  1, cw: -1 },
+  B: { axis: 'z', layer: -1, cw: +1 },
+  M: { axis: 'x', layer:  0, cw: -1 }, // 中層 (L/R 之間),跟 L 同方向
+};
+// 數字鍵採 David Guo 教學的數字記號 (1=R, 2=U, 3=L', 4=B, 5=U', 6=D, 7=R' — 可能要照截圖再校)
+const DIGIT_TO_MOVE = {
+  Digit1:  { face: 'R', ccw: false },
+  Digit2:  { face: 'U', ccw: false },
+  Digit3:  { face: 'F', ccw: true  },
+  Digit4:  { face: 'B', ccw: false },
+  Digit5:  { face: 'U', ccw: true  },
+  Digit6:  { face: 'F', ccw: false },
+  Digit7:  { face: 'R', ccw: true  },
+  Numpad1: { face: 'R', ccw: false },
+  Numpad2: { face: 'U', ccw: false },
+  Numpad3: { face: 'L', ccw: false },
+  Numpad4: { face: 'B', ccw: false },
+  Numpad5: { face: 'U', ccw: true  },
+  Numpad6: { face: 'F', ccw: false },
+  Numpad7: { face: 'R', ccw: true  },
+};
+
+function turnFace(face, ccw = false) {
+  if (animating || !controls.enabled) return;
+  const t = FACE_TURNS[face];
+  if (!t) return;
+  banner.classList.remove('show');
+  controls.enabled = false;
+  rotateLayer(t.axis, t.layer, ccw ? -t.cw : t.cw).then(() => {
+    controls.enabled = true;
+  });
+}
+
+window.addEventListener('keydown', ev => {
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const letter = ev.key.toUpperCase();
+  if (FACE_TURNS[letter]) {
+    ev.preventDefault();
+    turnFace(letter, ev.shiftKey);
+    return;
+  }
+  const m = DIGIT_TO_MOVE[ev.code];
+  if (m) {
+    ev.preventDefault();
+    const ccw = ev.shiftKey ? !m.ccw : m.ccw;
+    turnFace(m.face, ccw);
+  }
+});
+
+for (const chip of document.querySelectorAll('.key')) {
+  chip.addEventListener('click', ev => {
+    const defaultCcw = chip.dataset.ccw === '1';
+    const ccw = ev.shiftKey ? !defaultCcw : defaultCcw;
+    turnFace(chip.dataset.face, ccw);
+  });
+}
+
+// ----- render loop -----
+function render() {
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(render);
+}
+render();
+</script>
+</body>
+</html>
