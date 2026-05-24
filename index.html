@@ -142,23 +142,103 @@
     color: rgba(0, 0, 0, 0.5);
     padding: 6px 12px 2px;
   }
+  #practice {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 5;
+    padding: 10px 18px;
+    font-size: 16px;
+    font-weight: 800;
+    border-radius: 999px;
+    border: none;
+    background: #6c5ce7;
+    color: #fff;
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+    letter-spacing: 2px;
+    flex: none;
+    max-width: none;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  #practice:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+  }
+  #practice:disabled { opacity: 0.45; cursor: not-allowed; }
+  #practice-panel {
+    position: absolute;
+    top: 64px;
+    right: 12px;
+    width: min(280px, calc(100vw - 24px));
+    max-height: calc(100% - 80px);
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.96);
+    border-radius: 18px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+    padding: 10px 14px 14px;
+    z-index: 6;
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    backdrop-filter: blur(8px);
+  }
+  #practice-panel.show {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  #practice-panel h4 {
+    margin: 12px 4px 6px;
+    font-size: 13px;
+    color: #6c5ce7;
+    font-weight: 800;
+    letter-spacing: 2px;
+  }
+  #practice-panel h4:first-child { margin-top: 4px; }
+  #practice-panel .case {
+    display: block;
+    width: 100%;
+    margin-bottom: 6px;
+    padding: 10px 14px;
+    background: #f3f0ff;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    max-width: none;
+    flex: none;
+    letter-spacing: 0;
+    box-shadow: none;
+    transition: background 0.12s ease, transform 0.08s ease;
+  }
+  #practice-panel .case:hover:not(:disabled) { background: #e6deff; }
+  #practice-panel .case:active:not(:disabled) { transform: translateY(1px); }
+  #practice-panel .case:disabled { opacity: 0.45; cursor: not-allowed; }
 </style>
 </head>
 <body>
 <div id="app">
   <div id="canvas-wrap">
     <canvas id="cube-canvas"></canvas>
+    <button id="practice" type="button">練習</button>
+    <div id="practice-panel" role="menu"></div>
     <div id="banner">完成 🎉</div>
     <div id="hint">拖空白處轉視角 · 拖方塊面轉動該層</div>
   </div>
   <div id="keys">
-    <button class="key" data-face="R" data-ccw="0"><kbd>R</kbd>右順<span class="num">1</span></button>
-    <button class="key" data-face="U" data-ccw="0"><kbd>U</kbd>上順<span class="num">2</span></button>
+    <button class="key" data-face="R" data-ccw="1"><kbd>R'</kbd>右逆<span class="num">1</span></button>
+    <button class="key" data-face="U" data-ccw="1"><kbd>U'</kbd>上逆<span class="num">2</span></button>
     <button class="key" data-face="F" data-ccw="1"><kbd>F'</kbd>前逆<span class="num">3</span></button>
-    <button class="key" data-face="B" data-ccw="0"><kbd>B</kbd>後順<span class="num">4</span></button>
-    <button class="key" data-face="U" data-ccw="1"><kbd>U'</kbd>上逆<span class="num">5</span></button>
+    <button class="key" data-face="R" data-ccw="0"><kbd>R</kbd>右順<span class="num">4</span></button>
+    <button class="key" data-face="U" data-ccw="0"><kbd>U</kbd>上順<span class="num">5</span></button>
     <button class="key" data-face="F" data-ccw="0"><kbd>F</kbd>前順<span class="num">6</span></button>
-    <button class="key" data-face="R" data-ccw="1"><kbd>R'</kbd>右逆<span class="num">7</span></button>
+    <button class="key" data-face="L" data-ccw="0"><kbd>L</kbd>左順<span class="num">7</span></button>
   </div>
   <div class="key-tip">按字母、數字、或數字小鍵盤 = 順時鐘 　·　 Shift + 按鍵 = 逆時鐘</div>
   <div id="ui">
@@ -195,6 +275,8 @@ const wrap = document.getElementById('canvas-wrap');
 const banner = document.getElementById('banner');
 const btnScramble = document.getElementById('scramble');
 const btnReset = document.getElementById('reset');
+const btnPractice = document.getElementById('practice');
+const practicePanel = document.getElementById('practice-panel');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -479,6 +561,7 @@ async function scramble() {
   banner.classList.remove('show');
   btnScramble.disabled = true;
   btnReset.disabled = true;
+  btnPractice.disabled = true;
   controls.enabled = false;
   const axes = ['x', 'y', 'z'];
   const layers = [-1, 0, 1];
@@ -493,6 +576,7 @@ async function scramble() {
   }
   btnScramble.disabled = false;
   btnReset.disabled = false;
+  btnPractice.disabled = false;
   controls.enabled = true;
 }
 
@@ -508,33 +592,129 @@ function reset() {
 btnScramble.addEventListener('click', scramble);
 btnReset.addEventListener('click', reset);
 
+// ----- 練習情境 (David Guo 第三層四步驟) -----
+// formula 是「解這個情境要套的公式」(數字記號,參考鍵盤對應)
+// 進入情境的方法:從還原狀態套用公式的反向,使用者再正向套一次就回到還原
+const PRACTICE_CASES = [
+  { group: '頂面十字', cases: [
+    { label: 'B1 一字',   formula: '123564' },
+    { label: 'B2 L 形',   formula: '123564123564' },
+    { label: 'B3 點',     formula: '123564123564123564' },
+  ]},
+  { group: '頂面全黃 OLL', cases: [
+    { label: 'C1 三角逆翻', formula: '124215545' },
+    { label: 'C2 三角順翻', formula: '451542212' },
+  ]},
+  { group: '四角歸位', cases: [
+    { label: 'D1 一組相同', formula: '616773467766' },
+    { label: 'D3 零組相同', formula: '616773467766616773467766' },
+  ]},
+  { group: '邊塊歸位', cases: [
+    { label: 'E1 一個正確', formula: '124215545451542212' },
+    { label: 'E2 零個正確', formula: '124215545451542212124215545451542212' },
+  ]},
+];
+
+const DIGIT_TO_FACE = {
+  '1': { face: 'R', ccw: true  },
+  '2': { face: 'U', ccw: true  },
+  '3': { face: 'F', ccw: true  },
+  '4': { face: 'R', ccw: false },
+  '5': { face: 'U', ccw: false },
+  '6': { face: 'F', ccw: false },
+  '7': { face: 'L', ccw: false },
+};
+
+function parseFormula(str) {
+  return [...str].filter(c => DIGIT_TO_FACE[c]).map(c => DIGIT_TO_FACE[c]);
+}
+
+function invertMoves(moves) {
+  return moves.slice().reverse().map(m => ({ face: m.face, ccw: !m.ccw }));
+}
+
+function resetCubeInstant() {
+  for (const c of cubies) {
+    c.mesh.position.set(c.home.x * STEP, c.home.y * STEP, c.home.z * STEP);
+    c.mesh.quaternion.identity();
+  }
+}
+
+async function loadPractice(formula) {
+  if (animating) return;
+  banner.classList.remove('show');
+  btnScramble.disabled = true;
+  btnReset.disabled = true;
+  btnPractice.disabled = true;
+  controls.enabled = false;
+  resetCubeInstant();
+  const setup = invertMoves(parseFormula(formula));
+  for (const m of setup) {
+    const t = FACE_TURNS[m.face];
+    await rotateLayer(t.axis, t.layer, m.ccw ? -t.cw : t.cw, 55);
+  }
+  btnScramble.disabled = false;
+  btnReset.disabled = false;
+  btnPractice.disabled = false;
+  controls.enabled = true;
+}
+
+(function renderPracticePanel() {
+  for (const g of PRACTICE_CASES) {
+    const h = document.createElement('h4');
+    h.textContent = g.group;
+    practicePanel.appendChild(h);
+    for (const c of g.cases) {
+      const b = document.createElement('button');
+      b.className = 'case';
+      b.type = 'button';
+      b.textContent = c.label;
+      b.addEventListener('click', () => {
+        practicePanel.classList.remove('show');
+        loadPractice(c.formula);
+      });
+      practicePanel.appendChild(b);
+    }
+  }
+})();
+
+btnPractice.addEventListener('click', ev => {
+  ev.stopPropagation();
+  practicePanel.classList.toggle('show');
+});
+practicePanel.addEventListener('click', ev => ev.stopPropagation());
+document.addEventListener('click', () => practicePanel.classList.remove('show'));
+
 // ----- 鍵盤 / 點按 控制 (標準魔方記號) -----
 // dir 為 rotateLayer 的 sign,使物理結果等同該面「順時鐘」(從該面外側看)
 const FACE_TURNS = {
-  U: { axis: 'y', layer:  1, cw: +1 },
+  U: { axis: 'y', layer:  1, cw: -1 },
   D: { axis: 'y', layer: -1, cw: -1 },
-  R: { axis: 'x', layer:  1, cw: +1 },
-  L: { axis: 'x', layer: -1, cw: -1 },
+  R: { axis: 'x', layer:  1, cw: -1 },
+  L: { axis: 'x', layer: -1, cw: +1 },
   F: { axis: 'z', layer:  1, cw: -1 },
   B: { axis: 'z', layer: -1, cw: +1 },
-  M: { axis: 'x', layer:  0, cw: -1 }, // 中層 (L/R 之間),跟 L 同方向
+  M: { axis: 'x', layer:  0, cw: +1 }, // 中層 (L/R 之間),跟 L 同方向
 };
-// 數字鍵採 David Guo 教學的數字記號 (1=R, 2=U, 3=L', 4=B, 5=U', 6=D, 7=R' — 可能要照截圖再校)
+// 數字鍵採 David Guo 教學的數字記號:
+//   1/4 = R'/R 一對 ｜ 2/5 = U'/U 一對 ｜ 3/6 = F'/F 一對
+//   1/2/3 是逆時鐘,4/5/6 是順時鐘 ｜ 7 待確認 (暫定 D)
+//   參考: https://www.davidguo.idv.tw/cube/beginner3.html
 const DIGIT_TO_MOVE = {
-  Digit1:  { face: 'R', ccw: false },
-  Digit2:  { face: 'U', ccw: false },
+  Digit1:  { face: 'R', ccw: true  },
+  Digit2:  { face: 'U', ccw: true  },
   Digit3:  { face: 'F', ccw: true  },
-  Digit4:  { face: 'B', ccw: false },
-  Digit5:  { face: 'U', ccw: true  },
+  Digit4:  { face: 'R', ccw: false },
+  Digit5:  { face: 'U', ccw: false },
   Digit6:  { face: 'F', ccw: false },
-  Digit7:  { face: 'R', ccw: true  },
-  Numpad1: { face: 'R', ccw: false },
-  Numpad2: { face: 'U', ccw: false },
-  Numpad3: { face: 'L', ccw: false },
-  Numpad4: { face: 'B', ccw: false },
-  Numpad5: { face: 'U', ccw: true  },
+  Digit7:  { face: 'L', ccw: false },
+  Numpad1: { face: 'R', ccw: true  },
+  Numpad2: { face: 'U', ccw: true  },
+  Numpad3: { face: 'F', ccw: true  },
+  Numpad4: { face: 'R', ccw: false },
+  Numpad5: { face: 'U', ccw: false },
   Numpad6: { face: 'F', ccw: false },
-  Numpad7: { face: 'R', ccw: true  },
+  Numpad7: { face: 'L', ccw: false },
 };
 
 function turnFace(face, ccw = false) {
